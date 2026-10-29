@@ -13,7 +13,22 @@ if [[ -n "${BASH_VERSION:-}" ]] && ((BASH_VERSINFO[0] < 4)); then
   exit 1
 fi
 
-REA_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+# Resolve this script through any symlinks: bootstrap.sh links `rea` into
+# ~/.local/bin, and lib/ lives next to the real file, not next to the link.
+# readlink -f is GNU-only, so walk the chain by hand.
+_rea_self="${BASH_SOURCE[0]}"
+_rea_hops=0
+while [[ -L "$_rea_self" ]]; do
+  ((++_rea_hops > 20)) && { echo "rea: symlink loop resolving $0" >&2; exit 1; }
+  _rea_link="$(readlink -- "$_rea_self")"
+  if [[ "$_rea_link" == /* ]]; then
+    _rea_self="$_rea_link"
+  else
+    _rea_self="$(cd -- "$(dirname -- "$_rea_self")" && pwd -P)/$_rea_link"
+  fi
+done
+REA_ROOT="$(cd -- "$(dirname -- "$_rea_self")" && pwd -P)"
+unset _rea_self _rea_link _rea_hops
 export REA_ROOT
 
 for _lib in core detect backup gset pkg fetch ext theme fonts dock panel wm files input perf verify install; do

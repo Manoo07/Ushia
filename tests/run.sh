@@ -97,6 +97,16 @@ if ((BASH_VERSINFO[0] >= 4)); then
   assert "unknown command fails"  bash -c '! ./rea definitely-not-a-command'
   assert "unknown option fails"   bash -c '! ./rea audit --nonsense'
   assert "dry-run install completes" bash -c './rea install balanced --dry-run -y --force >/dev/null 2>&1'
+  # bootstrap.sh links the command into ~/.local/bin, so lib/ must still be
+  # found through a symlink. This broke once; it stays tested.
+  assert "runs through a symlink" bash -c '
+    d="$(mktemp -d)"; ln -s "$PWD/rea" "$d/rea"
+    "$d/rea" version >/dev/null && "$d/rea" audit >/dev/null
+    rc=$?; rm -rf "$d"; exit $rc'
+  assert "runs through a symlink to a symlink" bash -c '
+    d="$(mktemp -d)"; ln -s "$PWD/rea" "$d/rea1"; ln -s "$d/rea1" "$d/rea2"
+    "$d/rea2" version >/dev/null
+    rc=$?; rm -rf "$d"; exit $rc'
   assert "dry-run writes nothing to ~/.config/gtk-3.0" bash -c '
     before="$(ls ~/.config/gtk-3.0 2>/dev/null | sort)"
     ./rea install lite --dry-run -y --force >/dev/null 2>&1
