@@ -8,13 +8,13 @@ changes only the user-level desktop layer, records everything it touches, and
 can put it all back with one command.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/morluto/rea/main/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Manoo07/Ushia/main/bootstrap.sh | bash
 ```
 
 Prefer to read before you run? That is the better habit:
 
 ```bash
-git clone https://github.com/morluto/rea.git && cd rea
+git clone https://github.com/Manoo07/Ushia.git && cd Ushia
 ./rea audit              # what am I running, and what will conflict?
 ./rea install --dry-run   # every command it would run, nothing changed
 ./rea install             # the real thing — it asks before each decision

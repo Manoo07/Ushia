@@ -11,7 +11,7 @@
 # explicit step that you run yourself afterwards.
 set -euo pipefail
 
-REPO="${REA_REPO:-https://github.com/morluto/rea.git}"
+REPO="${REA_REPO:-https://github.com/Manoo07/Ushia.git}"
 REF="${REA_REF:-main}"
 SRC="${REA_SRC:-$HOME/.local/share/rea/src}"
 BIN="${REA_BIN:-$HOME/.local/bin}"
