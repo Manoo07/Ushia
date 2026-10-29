@@ -1,0 +1,151 @@
+/* ===========================================================================
+   Rea overrides shared by GTK3 and GTK4.
+   Deliberately narrow: metrics and radii the upstream theme leaves at GNOME
+   defaults. Anything structural is left to the theme so app updates do not
+   fight these rules.
+   =========================================================================== */
+
+/* --- selection -------------------------------------------------------------
+   One selection colour everywhere, instead of per-widget theme defaults. */
+*:selected,
+*:selected:focus,
+selection {
+  background-color: @rea_accent;
+  color: @rea_accent_fg;
+}
+
+/* --- focus ring ------------------------------------------------------------
+   macOS draws a soft 3px ring outside the control rather than a dotted
+   outline inside it. */
+*:focus-visible {
+  outline: 2px solid alpha(@rea_accent, 0.45);
+  outline-offset: 1px;
+}
+
+/* --- buttons --------------------------------------------------------------- */
+button {
+  border-radius: 6px;
+  min-height: 24px;
+  padding: 3px 12px;
+  transition: background-color 150ms cubic-bezier(.25,.1,.25,1),
+              box-shadow 150ms cubic-bezier(.25,.1,.25,1);
+}
+button.circular,
+button.pill { border-radius: 999px; }
+button:active { transition-duration: 80ms; }
+
+button.suggested-action {
+  background-image: none;
+  background-color: @rea_accent;
+  color: @rea_accent_fg;
+}
+button.suggested-action:hover { background-color: @rea_accent_hover; }
+button.suggested-action:active { background-color: @rea_accent_active; }
+
+/* --- text entries ---------------------------------------------------------- */
+entry,
+spinbutton:not(.vertical) {
+  border-radius: 6px;
+  min-height: 24px;
+  padding: 2px 8px;
+}
+entry:focus-within {
+  box-shadow: 0 0 0 3px alpha(@rea_accent, 0.30);
+}
+
+/* --- switches, checks, radios ---------------------------------------------- */
+switch { border-radius: 999px; min-width: 42px; min-height: 24px; }
+switch slider { border-radius: 999px; }
+check { border-radius: 4px; }
+radio { border-radius: 999px; }
+
+/* --- sliders --------------------------------------------------------------- */
+scale trough { border-radius: 999px; min-height: 4px; }
+scale highlight { border-radius: 999px; background-color: @rea_accent; }
+scale slider {
+  border-radius: 999px;
+  min-width: 18px;
+  min-height: 18px;
+  box-shadow: 0 1px 3px @rea_shadow;
+}
+
+/* --- scrollbars ------------------------------------------------------------
+   Thin, overlaid, and they grow under the pointer - the single most
+   recognisable difference from stock GNOME. */
+scrollbar {
+  background-color: transparent;
+  border: none;
+  transition: all 220ms cubic-bezier(0,0,.2,1);
+}
+scrollbar slider {
+  border-radius: 999px;
+  min-width: 7px;
+  min-height: 7px;
+  margin: 3px;
+  background-color: alpha(@rea_text, 0.28);
+  border: none;
+  transition: background-color 150ms linear, min-width 150ms linear;
+}
+scrollbar slider:hover  { background-color: alpha(@rea_text, 0.45); min-width: 9px; }
+scrollbar slider:active { background-color: alpha(@rea_text, 0.60); }
+scrollbar.overlay-indicator:not(.dragging):not(.hovering) slider {
+  background-color: alpha(@rea_text, 0.22);
+}
+
+/* --- menus and popovers ---------------------------------------------------- */
+menu, .menu, popover.menu, popover > contents {
+  border-radius: 8px;
+  padding: 4px;
+  border: 1px solid @rea_border;
+}
+menuitem, popover.menu modelbutton {
+  border-radius: 5px;
+  min-height: 24px;
+  padding: 2px 8px;
+}
+menuitem:hover, popover.menu modelbutton:hover {
+  background-color: @rea_accent;
+  color: @rea_accent_fg;
+}
+separator { background-color: @rea_border; }
+
+/* --- tooltips -------------------------------------------------------------- */
+tooltip, tooltip.background {
+  border-radius: 7px;
+  padding: 2px 6px;
+}
+tooltip label { padding: 2px 4px; }
+
+/* --- header bars and sidebars ---------------------------------------------- */
+headerbar { min-height: 46px; }
+headerbar entry, headerbar button { margin: 0 2px; }
+.sidebar, placessidebar, stacksidebar list {
+  background-color: transparent;
+}
+placessidebar row, .sidebar row, stacksidebar list row {
+  border-radius: 6px;
+  margin: 1px 6px;
+  min-height: 28px;
+}
+placessidebar row:selected, .sidebar row:selected {
+  background-color: alpha(@rea_accent, 0.90);
+  color: @rea_accent_fg;
+}
+
+/* --- lists and file views -------------------------------------------------- */
+treeview.view { border-radius: 0; }
+treeview.view:selected { background-color: @rea_accent; color: @rea_accent_fg; }
+gridview child, iconview .cell {
+  border-radius: 6px;
+}
+
+/* --- notebooks / tabs ------------------------------------------------------ */
+notebook > header > tabs > tab { border-radius: 6px 6px 0 0; min-height: 28px; }
+
+/* --- progress -------------------------------------------------------------- */
+progressbar trough, progressbar progress { border-radius: 999px; }
+progressbar progress { background-color: @rea_accent; }
+
+/* --- window chrome --------------------------------------------------------- */
+window.csd, window.dialog.csd { border-radius: 10px; }
+window.csd.dialog.message { border-radius: 12px; }   /* sheet-like alerts */

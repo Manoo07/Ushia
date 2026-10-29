@@ -1,0 +1,39 @@
+/* ===========================================================================
+   Rea design tokens
+   ---------------------------------------------------------------------------
+   One source of truth for colour, radius, spacing and timing. GTK CSS has no
+   general custom properties, so numeric tokens are documented here and used
+   literally in overrides.css. Keep the two in step.
+
+   RADIUS      window 10px · sheet 12px · popover 10px · menu 8px
+               button 6px · entry 6px · pill 999px · thumbnail 4px
+   SPACING     4 · 8 · 12 · 16 · 20 (4px base grid)
+   CONTROL     button height 28px · entry height 28px · menu item 24px
+               header bar 52px · sidebar 190px
+   TYPE        UI 11pt / 1.35 · caption 9pt · sidebar 10.5pt
+   TIMING      instant 80ms · short 150ms · standard 220ms · long 320ms
+   EASING      standard cubic-bezier(.25,.1,.25,1)
+               decelerate cubic-bezier(0,0,.2,1)
+   =========================================================================== */
+
+/* macOS-like system accents. Rea sets the blue by default; `rea profile
+   accent <name>` rewrites this block. */
+@define-color rea_accent        #0a7cff;
+@define-color rea_accent_hover  #2f8fff;
+@define-color rea_accent_active #0062d6;
+@define-color rea_accent_fg     #ffffff;
+
+/* Traffic lights, used by the window-control overrides. */
+@define-color rea_close   #ff5f57;
+@define-color rea_minimise #febc2e;
+@define-color rea_zoom    #28c840;
+@define-color rea_inactive #cfcfcf;
+
+/* Neutral surfaces, light appearance. */
+@define-color rea_surface       #f6f6f6;
+@define-color rea_surface_raise #ffffff;
+@define-color rea_border        alpha(#000000, 0.12);
+@define-color rea_border_strong alpha(#000000, 0.20);
+@define-color rea_shadow        alpha(#000000, 0.18);
+@define-color rea_text          #1d1d1f;
+@define-color rea_text_dim      alpha(#1d1d1f, 0.55);

@@ -1,0 +1,98 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: lint and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends shellcheck
+
+      - name: Versions
+        run: |
+          bash --version | head -1
+          shellcheck --version | sed -n 2p
+
+      - name: Test suite
+        run: tests/run.sh
+
+      # The runner has apt and no GNOME: the ideal place to prove the installer
+      # degrades instead of crashing when nothing it wants is present.
+      - name: Installer dry-run, every profile
+        run: |
+          for p in full balanced lite; do
+            echo "::group::$p"
+            ./rea install "$p" --dry-run --yes --force
+            echo "::endgroup::"
+          done
+
+      - name: Audit and verify produce valid JSON
+        run: |
+          ./rea audit --json  | python3 -c 'import json,sys; json.load(sys.stdin)'
+          ./rea verify --json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(len(d["checks"]), "checks")'
+
+      - name: Snapshot and rollback round trip
+        run: |
+          sudo apt-get install -y --no-install-recommends dconf-cli
+          ./rea snapshot ci
+          ./rea snapshots
+          ./rea rollback --yes
+
+      - name: A dry run must not write anything
+        run: |
+          sum_before=$(find "$HOME/.config" "$HOME/.local/share/fonts" -type f 2>/dev/null | sort | md5sum)
+          ./rea install balanced --dry-run --yes --force >/dev/null
+          sum_after=$(find "$HOME/.config" "$HOME/.local/share/fonts" -type f 2>/dev/null | sort | md5sum)
+          [ "$sum_before" = "$sum_after" ] || { echo "dry-run touched the filesystem"; exit 1; }
+
+  bootstrap:
+    name: bootstrap from a clone
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bootstrap against this checkout
+        env:
+          REA_REPO: ${{ github.workspace }}
+          REA_REF: ${{ github.head_ref || github.ref_name }}
+          REA_SRC: ${{ runner.temp }}/rea-src
+          REA_BIN: ${{ runner.temp }}/bin
+        run: ./bootstrap.sh
+
+      - name: The linked command works
+        env:
+          REA_BIN: ${{ runner.temp }}/bin
+        run: |
+          "$REA_BIN/rea" version
+          "$REA_BIN/rea" audit | tail -5
+
+  licensing:
+    name: no bundled Apple assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Rea must never carry a font, icon or artwork file. Everything visual is
+      # either generated here (SVG/CSS) or downloaded from upstream at install.
+      - name: No font or binary asset files in the repo
+        run: |
+          found=$(find . -path ./.git -prune -o -type f \
+            \( -iname '*.ttf' -o -iname '*.otf' -o -iname '*.ttc' -o -iname '*.woff*' \
+               -o -iname '*.icns' -o -iname '*.png' -o -iname '*.jpg' -o -iname '*.heic' \) -print)
+          if [ -n "$found" ]; then echo "Unexpected asset files:"; echo "$found"; exit 1; fi
+          echo "clean: no font or raster asset files are committed"
+
+      - name: No third-party repositories are added
+        run: |
+          if grep -rniE 'add-apt-repository|ppa:[a-z]' --include='*.sh' --include='*.conf' rea lib config bootstrap.sh; then
+            echo "Rea must not add third-party repositories"; exit 1
+          fi
+          echo "clean: no PPAs or external apt repositories"

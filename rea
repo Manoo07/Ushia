@@ -1,0 +1,263 @@
+#!/usr/bin/env bash
+# rea - a macOS-style desktop experience for Ubuntu (GNOME Shell).
+#
+# Safety model:
+#   * every run logs to ~/.local/share/rea/logs/
+#   * --dry-run changes nothing and prints what it would do
+#   * state-changing commands take a restorable snapshot first
+#   * nothing outside $HOME is written except apt packages you are shown first
+set -uo pipefail
+
+if [[ -n "${BASH_VERSION:-}" ]] && ((BASH_VERSINFO[0] < 4)); then
+  echo "rea: needs bash 4 or newer (found $BASH_VERSION)" >&2
+  exit 1
+fi
+
+REA_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+export REA_ROOT
+
+for _lib in core detect backup gset pkg fetch ext theme fonts dock panel wm files input perf verify install; do
+  # shellcheck source=/dev/null
+  . "$REA_ROOT/lib/$_lib.sh" || { echo "rea: cannot load lib/$_lib.sh" >&2; exit 1; }
+done
+unset _lib
+
+usage() {
+  cat <<USAGE
+${C_BOLD}rea $REA_VERSION${C_RESET} - macOS-style desktop for Ubuntu/GNOME
+
+  ${C_BOLD}Getting started${C_RESET}
+    rea doctor                Is this machine ready?
+    rea install               Do it (asks before each decision)
+    rea verify                Check the result against the acceptance criteria
+    rea rollback              Put everything back
+
+  ${C_BOLD}Commands${C_RESET}
+    audit                     Report OS, GPU, session, current appearance, conflicts
+    doctor                    Readiness check with reasons
+    install [profile]         Install: full | balanced | lite
+    reapply                   Re-apply the current profile without downloading
+    verify                    Run every acceptance check against the live system
+    bench [label]             Measure shell memory, idle CPU, boot time
+    bench --compare           Show the first and latest samples side by side
+    profile [list|show|set N] Inspect or switch profile
+    appearance <light|dark>   Switch appearance
+    shortcuts                 Print the keyboard map
+    snapshot [label]          Save a restore point
+    snapshots                 List restore points
+    rollback [id]             Restore one (default: most recent)
+    uninstall                 Remove Rea and restore the pre-install state
+    version · help
+
+  ${C_BOLD}Options${C_RESET}
+    --dry-run                 Print actions, change nothing
+    --yes, -y                 Accept defaults; no prompts (for scripts)
+    --json                    Machine-readable output (audit, verify)
+    --force                   Proceed despite failed readiness checks
+    --no-sudo                 Never escalate; skip anything needing root
+    --no-color                Plain output
+
+  ${C_BOLD}Examples${C_RESET}
+    rea install balanced -y   Unattended install of the recommended profile
+    rea install --dry-run     See every command first
+    rea bench before          Baseline, then install, then: rea bench after
+USAGE
+}
+
+REA_JSON=0
+REA_FORCE=0
+declare -a REA_ARGS=()
+while (($#)); do
+  case "$1" in
+    --dry-run)  REA_DRY_RUN=1 ;;
+    -y|--yes)   REA_ASSUME_YES=1 ;;
+    --json)     REA_JSON=1 ;;
+    --force)    REA_FORCE=1 ;;
+    --no-sudo)  REA_NO_SUDO=1 ;;
+    --no-color) C_RESET=""; C_DIM=""; C_BOLD=""; C_RED=""; C_GRN=""; C_YEL=""; C_BLU=""; C_CYA="" ;;
+    --compare)  REA_ARGS+=("--compare") ;;
+    -h|--help)  usage; exit 0 ;;
+    --)         shift; REA_ARGS+=("$@"); break ;;
+    -*)         echo "rea: unknown option '$1' (try 'rea help')" >&2; exit 2 ;;
+    *)          REA_ARGS+=("$1") ;;
+  esac
+  shift
+done
+
+cmd="${REA_ARGS[0]:-help}"
+[[ ${#REA_ARGS[@]} -gt 0 ]] && REA_ARGS=("${REA_ARGS[@]:1}")
+
+# Saved preferences (profile, appearance, snapshot id) then the pinned sources.
+rea_prefs_load
+# shellcheck source=/dev/null
+. "$REA_CONFIG_DIR/manifest.conf"
+# The last-used profile is the default for commands that need one.
+if [[ -n "${REA_PROFILE:-}" && -r "$REA_CONFIG_DIR/profiles/${REA_PROFILE}.conf" ]]; then
+  # shellcheck source=/dev/null
+  . "$REA_CONFIG_DIR/profiles/${REA_PROFILE}.conf"
+else
+  # shellcheck source=/dev/null
+  . "$REA_CONFIG_DIR/profiles/balanced.conf"
+fi
+
+[[ "$cmd" == "help" || "$cmd" == "version" || "$cmd" == "shortcuts" ]] || rea_log_init "$cmd ${REA_ARGS[*]:-}"
+
+case "$cmd" in
+  help)      usage ;;
+  version)   printf 'rea %s\n' "$REA_VERSION" ;;
+  shortcuts) rea_head "Keyboard map (Super stands in for Command)"; rea_wm_shortcut_table ;;
+
+  audit)
+    if ((REA_JSON)); then
+      rea_audit_json
+    else
+      rea_say "${C_BOLD}Rea system audit${C_RESET} ${C_DIM}($(date +%F\ %R))${C_RESET}"
+      rea_audit_print
+      [[ -n "$REA_LOG_FILE" ]] && rea_dim "log: $REA_LOG_FILE"
+    fi
+    ;;
+
+  doctor)
+    rea_head "Readiness check"
+    blockers="$(rea_detect_blockers)"
+    if [[ -n "$blockers" ]]; then
+      while IFS= read -r l; do [[ -n "$l" ]] && rea_err "$l"; done <<<"$blockers"
+      rea_say ""
+      rea_die "This machine is not ready. See docs/troubleshooting.md." 3
+    fi
+    rea_ok "OS: $REA_SYS_OS_NAME"
+    rea_ok "GNOME Shell $REA_SYS_SHELL_VER on $REA_SYS_SESSION_TYPE"
+    rea_ok "$REA_SYS_HOME_FREE_MB MB free in \$HOME"
+    [[ "$REA_SYS_CONFLICTS" == "none" ]] \
+      && rea_ok "No conflicting docks or compositors" \
+      || rea_warn "Rea will reconcile: $REA_SYS_CONFLICTS"
+    for t in curl unzip git dconf gsettings gnome-extensions fc-cache; do
+      have "$t" && rea_ok "found $t" || rea_warn "missing $t (Rea can install it)"
+    done
+    [[ "$REA_SYS_SESSION_TYPE" == "wayland" ]] \
+      && rea_info "Wayland: new extensions load after you log out and back in" \
+      || rea_info "Xorg: multi-finger workspace gestures will not be available"
+    rea_say ""
+    rea_say "Ready. Next: ${C_BOLD}rea install${C_RESET}"
+    ;;
+
+  install)
+    rea_install_run "${REA_ARGS[0]:-}"
+    ;;
+
+  reapply)
+    rea_reapply_run
+    ;;
+
+  verify)
+    if ((REA_JSON)); then
+      rea_verify_json
+    else
+      rea_say "${C_BOLD}Rea verification${C_RESET} ${C_DIM}(profile ${REA_PROFILE_NAME:-?})${C_RESET}"
+      rea_verify_all || exit 1
+    fi
+    ;;
+
+  bench)
+    rea_detect_all
+    if [[ "${REA_ARGS[0]:-}" == "--compare" ]]; then
+      rea_bench_compare || exit 1
+    else
+      rea_bench_run "${REA_ARGS[0]:-sample}"
+    fi
+    ;;
+
+  profile)
+    sub="${REA_ARGS[0]:-show}"
+    case "$sub" in
+      list) rea_head "Profiles"; rea_profile_list ;;
+      show)
+        rea_head "Current profile"
+        printf '  %-18s %s\n' "profile" "${REA_PROFILE_NAME:-balanced}"
+        printf '  %-18s %s\n' "description" "${REA_PROFILE_DESC:-}"
+        printf '  %-18s %s\n' "appearance" "${REA_APPEARANCE:-light}"
+        printf '  %-18s %s\n' "dock" "${REA_DOCK_FLAVOUR} ${REA_DOCK_ICON_SIZE}px (magnify=${REA_DOCK_MAGNIFY})"
+        printf '  %-18s %s\n' "blur" "${REA_BLUR} (sigma ${REA_BLUR_SIGMA})"
+        printf '  %-18s %s\n' "animations" "${REA_ANIMATIONS} (speed ${REA_ANIMATION_SPEED})"
+        rea_say ""
+        rea_say "  Switch with: ${C_BOLD}rea profile set lite${C_RESET}"
+        ;;
+      set)
+        name="${REA_ARGS[1]:-}"
+        [[ -n "$name" ]] || rea_die "Usage: rea profile set <full|balanced|lite>"
+        rea_profile_load "$name" || exit 1
+        rea_detect_all
+        rea_head "Switching to $name"
+        rea_snapshot_create "pre-profile-$name" >/dev/null
+        # Extensions a richer profile needs may not be installed yet.
+        rea_panel_install; rea_dock_install; rea_wm_install
+        rea_reapply_run
+        ((REA_NEEDS_LOGOUT)) && rea_say "  Log out and back in to load the new extensions."
+        ;;
+      *) rea_die "Unknown: rea profile $sub (try list, show, set)" ;;
+    esac
+    ;;
+
+  appearance)
+    mode="${REA_ARGS[0]:-}"
+    case "$mode" in
+      light|dark)
+        rea_detect_all
+        REA_APPEARANCE="$mode"
+        rea_prefs_set REA_APPEARANCE "$mode"
+        rea_theme_apply "$mode"
+        rea_ok "Switched to $mode"
+        ;;
+      *) rea_die "Usage: rea appearance <light|dark>" ;;
+    esac
+    ;;
+
+  snapshot)
+    rea_detect_all
+    rea_head "Snapshot"
+    id="$(rea_snapshot_create "${REA_ARGS[0]:-manual}")"
+    rea_ok "Saved snapshot ${C_BOLD}$id${C_RESET}"
+    rea_dim "$REA_SNAPSHOT_DIR/$id"
+    rea_say ""
+    rea_say "Restore it any time with: ${C_BOLD}rea rollback $id${C_RESET}"
+    ;;
+
+  snapshots)
+    list="$(rea_snapshot_list | sort)"
+    if [[ -z "$list" ]]; then
+      rea_say "No snapshots yet. Create one with 'rea snapshot'."
+    else
+      rea_head "Snapshots"
+      while IFS= read -r id; do
+        [[ -n "$id" ]] || continue
+        printf '  %s%s%s\n' "$C_BOLD" "$id" "$C_RESET"
+        rea_snapshot_info "$id" | sed 's/^/  /'
+      done <<<"$list"
+    fi
+    ;;
+
+  rollback)
+    id="${REA_ARGS[0]:-$(rea_snapshot_latest)}"
+    [[ -n "$id" ]] || rea_die "No snapshots to roll back to."
+    rea_detect_all
+    rea_head "Rollback"
+    rea_snapshot_info "$id" || exit 1
+    rea_say ""
+    ask_yes_no "Restore this snapshot? Current appearance settings will be replaced." y \
+      || { rea_skip "Cancelled"; exit 0; }
+    rea_snapshot_restore "$id" || rea_die "Rollback failed; see $REA_LOG_FILE"
+    rea_say ""
+    rea_ok "Rolled back to $id"
+    if [[ "${REA_SYS_SESSION_TYPE:-}" == "wayland" ]]; then
+      rea_say "Log out and back in to finish restoring the shell."
+    else
+      rea_say "Press Alt+F2, type 'r' and press Enter to restart GNOME Shell."
+    fi
+    ;;
+
+  uninstall)
+    rea_uninstall_run
+    ;;
+
+  *) echo "rea: unknown command '$cmd' (try 'rea help')" >&2; exit 2 ;;
+esac

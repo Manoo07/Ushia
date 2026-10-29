@@ -1,0 +1,46 @@
+/* ===========================================================================
+   GTK4 / libadwaita only. Node names here do not exist in GTK3, so they live
+   in a separate file rather than producing parse warnings for every GTK3 app.
+   =========================================================================== */
+
+/* libadwaita exposes its palette as named colours; pointing them at Rea's
+   accent is what makes GNOME 43+ apps match the rest of the desktop. */
+@define-color accent_color @rea_accent;
+@define-color accent_bg_color @rea_accent;
+@define-color accent_fg_color @rea_accent_fg;
+
+/* Boxed lists: macOS grouped-table metrics. */
+.boxed-list, list.boxed-list {
+  border-radius: 10px;
+}
+.boxed-list > row {
+  min-height: 40px;
+  padding: 6px 12px;
+}
+
+/* Preference windows read as Settings panes rather than mobile pages. */
+.preferences-page, preferencespage {
+  padding-top: 8px;
+}
+
+/* Toasts: smaller, rounder, bottom-centred like a macOS notification. */
+toast, .toast {
+  border-radius: 999px;
+  padding: 6px 10px;
+}
+
+/* Adwaita dialogs lose their hard corners. */
+dialog.csd, .dialog-content, alertdialog {
+  border-radius: 12px;
+}
+
+/* Overlay split views (Nautilus, Settings) keep a translucent sidebar. */
+.navigation-sidebar {
+  background-color: transparent;
+  padding: 2px 0;
+}
+.navigation-sidebar > row {
+  border-radius: 6px;
+  margin: 1px 6px;
+  min-height: 30px;
+}

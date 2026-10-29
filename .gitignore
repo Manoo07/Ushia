@@ -1,0 +1,9 @@
+# Rea writes its state to ~/.local/share/rea, never into the repo. These
+# entries exist so a stray local run cannot be committed by accident.
+*.log
+*.swp
+.DS_Store
+/snapshots/
+/bench/
+/cache/
+/logs/
